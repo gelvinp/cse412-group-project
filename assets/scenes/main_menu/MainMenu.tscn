@@ -1,0 +1,51 @@
+[gd_scene load_steps=6 format=2]
+
+[ext_resource path="res://assets/textures/main_menu/space.png" type="Texture" id=1]
+[ext_resource path="res://assets/scenes/main_menu/Earth.tscn" type="PackedScene" id=2]
+[ext_resource path="res://assets/scenes/main_menu/DBInitForm.tscn" type="PackedScene" id=3]
+[ext_resource path="res://assets/scripts/main_menu/MainMenu.gd" type="Script" id=4]
+
+[sub_resource type="Environment" id=1]
+
+[node name="MainMenu" type="Node"]
+script = ExtResource( 4 )
+
+[node name="Sprite" type="Sprite" parent="."]
+texture = ExtResource( 1 )
+centered = false
+
+[node name="ViewportContainer" type="ViewportContainer" parent="."]
+margin_right = 40.0
+margin_bottom = 40.0
+
+[node name="Viewport" type="Viewport" parent="ViewportContainer"]
+size = Vector2( 1024, 600 )
+transparent_bg = true
+handle_input_locally = false
+render_target_update_mode = 3
+
+[node name="EarthCamera" type="Spatial" parent="ViewportContainer/Viewport"]
+
+[node name="Earth" parent="ViewportContainer/Viewport/EarthCamera" instance=ExtResource( 2 )]
+transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0, 0, 0 )
+
+[node name="Camera" type="Camera" parent="ViewportContainer/Viewport/EarthCamera"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.97796 )
+environment = SubResource( 1 )
+projection = 2
+frustum_offset = Vector2( -0.286, 0 )
+near = 0.79
+far = 24.7
+
+[node name="DirectionalLight" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6 )
+
+[node name="DBInitForm" parent="." instance=ExtResource( 3 )]
+anchor_top = 0.5
+anchor_bottom = 0.5
+margin_left = 87.0
+margin_top = -172.0
+margin_right = 417.0
+margin_bottom = 173.0
+
+[connection signal="initialize" from="DBInitForm" to="." method="_on_DBInitForm_initialize"]

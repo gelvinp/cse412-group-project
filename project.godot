@@ -9,18 +9,27 @@
 config_version=4
 
 _global_script_classes=[ {
+"base": "",
+"class": "DatabaseInitializer",
+"language": "NativeScript",
+"path": "res://gdnative/lib412/database_initializer.gdns"
+}, {
 "base": "Object",
 "class": "PostgreSQLClient",
 "language": "GDScript",
 "path": "res://vendor/PostgreSQLClient/PostgreSQLClient.gd"
 } ]
 _global_script_class_icons={
+"DatabaseInitializer": "",
 "PostgreSQLClient": ""
 }
 
 [application]
 
 config/name="CSE 412 Group Project"
+run/main_scene="res://assets/scenes/main_menu/MainMenu.tscn"
+boot_splash/image="res://assets/textures/splash.png"
+boot_splash/bg_color=Color( 0, 0, 0, 1 )
 config/icon="res://icon.png"
 
 [gui]
@@ -33,4 +42,5 @@ common/enable_pause_aware_picking=true
 
 [rendering]
 
+threads/thread_model=2
 environment/default_environment="res://default_env.tres"
