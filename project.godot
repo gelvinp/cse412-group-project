@@ -14,14 +14,26 @@ _global_script_classes=[ {
 "language": "NativeScript",
 "path": "res://gdnative/lib412/database_initializer.gdns"
 }, {
+"base": "MarginContainer",
+"class": "ErrorDisplay",
+"language": "GDScript",
+"path": "res://assets/scripts/main_menu/Error.gd"
+}, {
 "base": "Object",
 "class": "PostgreSQLClient",
 "language": "GDScript",
 "path": "res://vendor/PostgreSQLClient/PostgreSQLClient.gd"
+}, {
+"base": "MarginContainer",
+"class": "ProgressDisplay",
+"language": "GDScript",
+"path": "res://assets/scripts/main_menu/Progress.gd"
 } ]
 _global_script_class_icons={
 "DatabaseInitializer": "",
-"PostgreSQLClient": ""
+"ErrorDisplay": "",
+"PostgreSQLClient": "",
+"ProgressDisplay": ""
 }
 
 [application]

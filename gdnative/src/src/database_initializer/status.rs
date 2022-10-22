@@ -1,6 +1,6 @@
 use gdnative::prelude::*;
 
-static STAGES: [&str; 5] = ["Starting up", "Importing time points", "Importing regions", "Importing countries", "Importing weather points"];
+static STAGES: [&str; 5] = ["Starting up", "Importing regions", "Importing time points", "Importing weather points", "Importing countries"];
 
 
 pub struct Status
@@ -10,6 +10,8 @@ pub struct Status
     pub total_work: u32,
     pub discrete_progress: bool,
     pub cancelled: bool,
+    pub completed: bool,
+    pub error: Option<String>,
 }
 
 impl Status
@@ -23,12 +25,32 @@ impl Status
             total_work: 0,
             discrete_progress: false,
             cancelled: false,
+            completed: false,
+            error: None,
         }
     }
 
     pub fn dictionary(&self) -> Dictionary<Unique>
     {
         let dict = Dictionary::new();
+
+        dict.insert("completed", self.completed);
+        
+        if self.completed
+        {
+            return dict;
+        }
+
+        match &self.error
+        {
+            Some(error) =>
+            {
+                dict.insert("error", error);
+                return dict;
+            }
+
+            None => {}
+        }
 
         dict.insert("stage", self.current_stage);
         dict.insert("discrete", self.discrete_progress);
@@ -40,5 +62,10 @@ impl Status
         }
 
         dict
+    }
+
+    pub fn set_stage(&mut self, stage: usize)
+    {
+        self.current_stage = STAGES[stage];
     }
 }
