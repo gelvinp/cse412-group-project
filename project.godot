@@ -9,7 +9,7 @@
 config_version=4
 
 _global_script_classes=[ {
-"base": "",
+"base": "Node",
 "class": "DatabaseInitializer",
 "language": "NativeScript",
 "path": "res://gdnative/lib412/database_initializer.gdns"
@@ -31,6 +31,11 @@ run/main_scene="res://assets/scenes/main_menu/MainMenu.tscn"
 boot_splash/image="res://assets/textures/splash.png"
 boot_splash/bg_color=Color( 0, 0, 0, 1 )
 config/icon="res://icon.png"
+
+[display]
+
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
 
 [gui]
 
