@@ -9,4 +9,5 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gdnative = { version = "0.11", features = ["custom-godot"] }
+gdnative = { version = "0.11" }
+postgres = "0.19.4"

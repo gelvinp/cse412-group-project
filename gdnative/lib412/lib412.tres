@@ -1,5 +1,9 @@
 [gd_resource type="GDNativeLibrary" format=2]
 
 [resource]
+entry/OSX.64 = "res://gdnative/lib412/macos-universal/lib412.dylib"
+entry/OSX.arm64 = "res://gdnative/lib412/macos-universal/lib412.dylib"
 entry/Windows.64 = "res://gdnative/lib412/win-x64/lib412.dll"
+dependency/OSX.64 = [  ]
+dependency/OSX.arm64 = [  ]
 dependency/Windows.64 = [  ]

@@ -19,3 +19,4 @@ data_*/
 # Ignore large data folder
 large_data/*
 !large_data/.gdignore
+.DS_Store

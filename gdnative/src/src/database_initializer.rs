@@ -1,4 +1,5 @@
 mod status;
+mod connection;
 
 
 use gdnative::prelude::*;
