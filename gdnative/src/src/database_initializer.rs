@@ -13,6 +13,7 @@ use gdnative::export::user_data::MutexData;
 use std::io::{BufReader, Error, Read, Result, ErrorKind, BufWriter, Write};
 use std::fs::{File, self};
 use std::thread;
+use connection::PGConnection;
 
 #[derive(Clone, Copy)]
 struct Timepoint(u16, u16);
@@ -24,6 +25,7 @@ struct Timepoint(u16, u16);
 pub struct DatabaseInitializer
 {
     status: Arc<Mutex<Status>>,
+    connection: Arc<Mutex<PGConnection>>,
 }
 
 
@@ -34,6 +36,7 @@ impl DatabaseInitializer
         DatabaseInitializer
         {
             status: Arc::new(Mutex::new(Status::new())),
+            connection: Arc::new(Mutex::new(PGConnection::new())),
         }
     }
 }
@@ -41,6 +44,16 @@ impl DatabaseInitializer
 #[methods]
 impl DatabaseInitializer
 {
+    #[method]
+    fn connect(&mut self, #[base] owner: &Node, ip: String, port: String, name: String, user: String, pass: String) -> bool
+    {
+        match self.connection.lock()
+        {
+            Ok(mut res) => res.connect(&ip, &port, &name, &user, &pass),
+            Err(_) => false
+        }
+    }
+    
     #[method]
 	fn init_db(&mut self, #[base] owner: &Node)
 	{

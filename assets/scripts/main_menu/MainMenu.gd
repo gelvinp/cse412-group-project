@@ -15,6 +15,13 @@ onready var camera := $ViewportContainer/Viewport/EarthCamera/Camera
 
 func _on_DBInitForm_initialize(address, port, database, username, password):
 	_db_init = DatabaseInitializer.new()
+	if not _db_init.connect(address, port, database, username, password):
+		hide_form()
+		error = error_scene.instance()
+		add_child(error)
+		error.error_text = "Unable to connect to database"
+		error.connect("acknowledged", self, "_on_error_acknowledged")
+		return
 	
 	progress = progress_scene.instance()
 	progress.db_init = _db_init
