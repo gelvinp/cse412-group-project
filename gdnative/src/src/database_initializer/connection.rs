@@ -48,21 +48,21 @@ impl PGConnection
 
             CREATE TABLE \"Regions\" (
                 r_region_id int PRIMARY KEY,
-                r_coord_x int,
-                r_coord_y int
+                r_coord_x smallint,
+                r_coord_y smallint
             );
 
             CREATE TABLE \"Timepoints\" (
-                t_timepoint_id int PRIMARY KEY,
-                t_year int,
-                t_month int
+                t_timepoint_id smallint PRIMARY KEY,
+                t_year smallint,
+                t_month smallint
             );
 
             CREATE TABLE \"Countries\" (
                 c_iso_a3 char(3) PRIMARY KEY,
                 c_name varchar(128),
-                c_center_x int,
-                c_center_y int
+                c_center_x smallint,
+                c_center_y smallint
             );
 
             CREATE TABLE \"RegionInCountry\" (
@@ -75,10 +75,10 @@ impl PGConnection
 
             CREATE TABLE \"Weatherpoints\" (
                 wp_region_id int,
-                wp_timepoint_id int,
-                wp_prec int,
-                wp_tmin int,
-                wp_tmax int,
+                wp_timepoint_id smallint,
+                wp_prec smallint,
+                wp_tmin smallint,
+                wp_tmax smallint,
                 PRIMARY KEY (wp_region_id, wp_timepoint_id),
                 CONSTRAINT fk_region FOREIGN KEY(wp_region_id) REFERENCES \"Regions\"(r_region_id),
                 CONSTRAINT fk_timepoint FOREIGN KEY(wp_timepoint_id) REFERENCES \"Timepoints\"(t_timepoint_id)
