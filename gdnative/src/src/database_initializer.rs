@@ -6,7 +6,7 @@ use gdnative::prelude::*;
 use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, mpsc::channel};
+use std::sync::{Arc, Mutex, mpsc::{Receiver, sync_channel, channel}};
 use std::time::Duration;
 use status::Status;
 use gdnative::export::user_data::MutexData;
@@ -14,6 +14,10 @@ use std::io::{BufReader, Error, Read, Result, ErrorKind, BufWriter, Write};
 use std::fs::{File, self};
 use std::thread;
 use connection::PGConnection;
+
+
+const BATCH_SIZE: usize = 100_000;
+
 
 #[derive(Clone, Copy)]
 struct Timepoint(u16, u16);
@@ -53,15 +57,34 @@ impl DatabaseInitializer
             Err(_) => false
         }
     }
-    
+
     #[method]
 	fn init_db(&mut self, #[base] owner: &Node)
 	{
         let thread_state = Arc::clone(&self.status);
+        let thread_connection = Arc::clone(&self.connection);
+
+        match self.connection.lock()
+        {
+            Ok(mut res) => 
+            {
+                if !res.init()
+                {
+                    set_error(&thread_state, Error::new(ErrorKind::Other, "Failed to create database schema"));
+                    return;
+                }
+            }
+            
+            Err(_) =>
+            {
+                set_error(&thread_state, Error::new(ErrorKind::Other, "Failed to create database schema"));
+                return;
+            }
+        };
 
         thread::spawn(move||
         {
-            let region_count = match import_regions(&thread_state)
+            let region_count = match import_regions(&thread_state, &thread_connection)
             {
                 Ok(count) => count,
                 Err(err) =>
@@ -71,7 +94,7 @@ impl DatabaseInitializer
                 }
             };
 
-            let timepoints = match import_timepoints(&thread_state)
+            let timepoints = match import_timepoints(&thread_state, &thread_connection)
             {
                 Ok(timepoints) => timepoints,
                 Err(err) =>
@@ -81,7 +104,7 @@ impl DatabaseInitializer
                 }
             };
 
-            match import_weatherpoints(&thread_state, timepoints, region_count)
+            match import_weatherpoints(&thread_state, &thread_connection, timepoints, region_count)
             {
                 Ok(_) => {},
                 Err(err) =>
@@ -91,7 +114,7 @@ impl DatabaseInitializer
                 }
             };
 
-            match import_countries(&thread_state)
+            match import_countries(&thread_state, &thread_connection)
             {
                 Ok(_) => {},
                 Err(err) =>
@@ -147,7 +170,7 @@ impl DatabaseInitializer
     }
 }
 
-fn import_regions(status: &Arc<Mutex<Status>>) -> Result<u32>
+fn import_regions(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>) -> Result<u32>
 {
     godot_print!("Importing Regions");
 
@@ -187,6 +210,8 @@ fn import_regions(status: &Arc<Mutex<Status>>) -> Result<u32>
         }
     }
 
+    let mut regions = Vec::<String>::with_capacity(region_count as usize);
+
     for index in 0..region_count
     {
         let mut xBuffer = [0u8; 2];
@@ -197,7 +222,7 @@ fn import_regions(status: &Arc<Mutex<Status>>) -> Result<u32>
         let x = u16::from_le_bytes(xBuffer);
         let y = u16::from_le_bytes(yBuffer);
 
-        //godot_print!("{}, {}", x, y);
+        regions.push(format!("({}, {}, {})", index, x, y));
 
         match status.lock()
         {
@@ -208,7 +233,70 @@ fn import_regions(status: &Arc<Mutex<Status>>) -> Result<u32>
                     return Ok(region_count)
                 }
                 
-                res.current_progress = index;
+                res.current_progress = index + 1;
+            }
+
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        }
+    }
+
+    let batches = ((region_count as usize / BATCH_SIZE) + 1) as usize;
+
+    match status.lock()
+    {
+        Ok(mut res) =>
+        {
+            if res.cancelled
+            {
+                return Ok(region_count)
+            }
+
+            res.set_stage(2);
+            res.current_progress = 0;
+            res.total_work = batches as u32;
+            res.discrete_progress = true;
+        }
+
+        Err(e) =>
+        {
+            return Err(Error::new(ErrorKind::Other, e.to_string()));
+        }
+    }
+
+    for batch in 0..batches
+    {
+        let batch_start = batch * BATCH_SIZE;
+        let batch_end = std::cmp::min(batch_start + BATCH_SIZE, region_count as usize);
+
+        match connection.lock()
+        {
+            Ok(mut res) =>
+            {
+                if !res.insert_regions(&regions[batch_start..batch_end])
+                {
+                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                }
+            }
+    
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        }
+
+        match status.lock()
+        {
+            Ok(mut res) =>
+            {
+                if res.cancelled
+                {
+                    return Ok(region_count)
+                }
+                
+                res.current_progress = batch as u32 + 1;
             }
 
             Err(e) =>
@@ -221,7 +309,7 @@ fn import_regions(status: &Arc<Mutex<Status>>) -> Result<u32>
     Ok(region_count)
 }
 
-fn import_timepoints(status: &Arc<Mutex<Status>>) -> Result<Vec<Timepoint>>
+fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>) -> Result<Vec<Timepoint>>
 {
     godot_print!("Importing Timepoints");
 
@@ -241,6 +329,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>) -> Result<Vec<Timepoint>>
     let count = u32::from_le_bytes(countBuffer);
 
     let mut timepoints = Vec::<Timepoint>::with_capacity(count as usize);
+    let mut timepoint_strings = Vec::<String>::with_capacity(count as usize);
 
     match status.lock()
     {
@@ -251,7 +340,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>) -> Result<Vec<Timepoint>>
                 return Ok(timepoints)
             }
 
-            res.set_stage(2);
+            res.set_stage(3);
             res.current_progress = 0;
             res.total_work = count;
             res.discrete_progress = true;
@@ -274,6 +363,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>) -> Result<Vec<Timepoint>>
         let month = encoded & 0x000F;
 
         timepoints.push(Timepoint(year, month));
+        timepoint_strings.push(format!("({}, {}, {})", index, year, month));
 
         match status.lock()
         {
@@ -294,10 +384,73 @@ fn import_timepoints(status: &Arc<Mutex<Status>>) -> Result<Vec<Timepoint>>
         }
     }
 
+    let batches = ((timepoint_strings.len() / BATCH_SIZE) + 1) as usize;
+
+    match status.lock()
+    {
+        Ok(mut res) =>
+        {
+            if res.cancelled
+            {
+                return Ok(timepoints)
+            }
+
+            res.set_stage(4);
+            res.current_progress = 0;
+            res.total_work = batches as u32;
+            res.discrete_progress = true;
+        }
+
+        Err(e) =>
+        {
+            return Err(Error::new(ErrorKind::Other, e.to_string()));
+        }
+    }
+
+    for batch in 0..batches
+    {
+        let batch_start = batch * BATCH_SIZE;
+        let batch_end = std::cmp::min(batch_start + BATCH_SIZE, timepoint_strings.len());
+
+        match connection.lock()
+        {
+            Ok(mut res) =>
+            {
+                if !res.insert_timepoints(&timepoint_strings[batch_start..batch_end])
+                {
+                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                }
+            }
+    
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        }
+
+        match status.lock()
+        {
+            Ok(mut res) =>
+            {
+                if res.cancelled
+                {
+                    return Ok(timepoints)
+                }
+                
+                res.current_progress = batch as u32 + 1;
+            }
+
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        }
+    }
+
     Ok(timepoints)
 }
 
-fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>, region_count: u32) -> Result<()>
+fn import_weatherpoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>, timepoints: Vec<Timepoint>, region_count: u32) -> Result<()>
 {
     godot_print!("Importing Weatherpoints");
 
@@ -310,7 +463,7 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>,
                 return Ok(())
             }
 
-            res.set_stage(3);
+            res.set_stage(5);
             res.current_progress = 0;
             res.total_work = timepoints.len() as u32;
             res.discrete_progress = true;
@@ -322,12 +475,22 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>,
         }
     }
 
+    let (sender, receiver) = sync_channel(4);
+    let batchConnection = Arc::clone(connection);
+    let handle = thread::spawn(move|| {
+        batch_weatherpoints(receiver, batchConnection)
+    });
+
     for (index, timepoint) in timepoints.into_iter().enumerate()
     {
+        let mut points = Arc::new(Mutex::new(Vec::<String>::with_capacity(region_count as usize)));
+
         match timepoint
         {
             Timepoint(year, month) =>
             {
+                let mut points = points.lock().unwrap();
+
                 let suffix = format!("{}-{:02}", year, month);
 
                 let mut file = BufReader::new(File::open(format!("large_data/weather_points/{}.bin", suffix))?);
@@ -382,10 +545,17 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>,
                     let prec = (-255f32 * f32::ln(-((prec_mapped as f32) - 255f32) / 255f32)) as u8;
                     let tmax = (tmax_mapped + 20);
 
-                    //godot_print!("{}, {}, {}", prec, tmin, tmax);
+                    if tmin > tmax
+                    {
+                        godot_print!("Problem: {}, {}", tmin, tmax);
+                    }
+
+                    points.push(format!("({}, {}, {}, {}, {})", regionID, index, prec, tmin, tmax));
                 }
             }
         }
+
+        sender.send(points);
 
         match status.lock()
         {
@@ -396,7 +566,7 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>,
                     return Ok(())
                 }
 
-                res.current_progress = index as u32;
+                res.current_progress = index as u32 + 1;
             }
 
             Err(e) =>
@@ -406,10 +576,105 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, timepoints: Vec<Timepoint>,
         }
     }
 
+    match status.lock()
+    {
+        Ok(mut res) =>
+        {
+            if res.cancelled
+            {
+                return Ok(())
+            }
+
+            res.set_stage(6);
+            res.discrete_progress = false;
+        }
+
+        Err(e) =>
+        {
+            return Err(Error::new(ErrorKind::Other, e.to_string()));
+        }
+    }
+
+    match handle.join()
+    {
+        Ok(res) =>
+        {
+            match res
+            {
+                Ok(_) => {}
+                Err(err) =>
+                {
+                    return Err(Error::new(ErrorKind::Other, err.to_string()));
+                }
+            }
+        }
+
+        Err(_) =>
+        {
+            return Err(Error::new(ErrorKind::Other, "Weatherpoint batcher panicked!"));
+        }
+    }
+
     Ok(())
 }
 
-fn import_countries(status: &Arc<Mutex<Status>>) -> Result<()>
+
+fn batch_weatherpoints(receiver: Receiver<Arc<Mutex<Vec<String>>>>, connection: Arc<Mutex<PGConnection>>) -> Result<()>
+{
+    loop
+    {
+        let data = match receiver.recv()
+        {
+            Ok(res) => res,
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        };
+        let data = match data.lock()
+        {
+            Ok(res) => res,
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
+        };
+
+        if data.len() == 0
+        {
+            break;
+        }
+
+        let batches = ((data.len() / BATCH_SIZE) + 1) as usize;
+
+        for batch in 0..batches
+        {
+            let batch_start = batch * BATCH_SIZE;
+            let batch_end = std::cmp::min(batch_start + BATCH_SIZE, data.len());
+    
+            match connection.lock()
+            {
+                Ok(mut res) =>
+                {
+                    if !res.insert_weatherpoints(&data[batch_start..batch_end])
+                    {
+                        return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                    }
+                }
+        
+                Err(e) =>
+                {
+                    return Err(Error::new(ErrorKind::Other, e.to_string()));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+
+fn import_countries(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>) -> Result<()>
 {
     godot_print!("Importing Countries");
 
@@ -444,7 +709,7 @@ fn import_countries(status: &Arc<Mutex<Status>>) -> Result<()>
                 return Ok(())
             }
 
-            res.set_stage(4);
+            res.set_stage(7);
             res.current_progress = 0;
             res.total_work = countries.len() as u32;
             res.discrete_progress = true;
@@ -504,10 +769,28 @@ fn import_countries(status: &Arc<Mutex<Status>>) -> Result<()>
         let count = u32::from_le_bytes(count);
 
         let mut region_buf = [0u8; 4];
+        let mut regions = Vec::<u32>::with_capacity(count as usize);
+
         for _ in 0..count
         {
             file.read(&mut region_buf)?;
-            let region = u32::from_le_bytes(region_buf);
+            regions.push(u32::from_le_bytes(region_buf));
+        }
+
+        match connection.lock()
+        {
+            Ok(mut res) =>
+            {
+                if !res.insert_country(&iso_a3, &name, center_x as u32, center_y as u32, &regions)
+                {
+                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                }
+            }
+    
+            Err(e) =>
+            {
+                return Err(Error::new(ErrorKind::Other, e.to_string()));
+            }
         }
 
         match status.lock()
@@ -519,7 +802,7 @@ fn import_countries(status: &Arc<Mutex<Status>>) -> Result<()>
                     return Ok(())
                 }
 
-                res.current_progress = index as u32;
+                res.current_progress = index as u32 + 1;
             }
 
             Err(e) =>

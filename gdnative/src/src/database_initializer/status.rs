@@ -1,6 +1,6 @@
 use gdnative::prelude::*;
 
-static STAGES: [&str; 5] = ["Starting up", "Importing regions", "Importing time points", "Importing weather points", "Importing countries"];
+static STAGES: [&str; 9] = ["Starting up", "Importing regions", "Processing regions", "Importing time points", "Processing time points", "Importing weather points", "Processing weather points", "Importing countries", "Processing countries"];
 
 
 pub struct Status

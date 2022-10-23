@@ -203,9 +203,14 @@ disabled = true
 text = "Initialize"
 
 [connection signal="text_changed" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer/Address" to="." method="_on_text_changed"]
+[connection signal="text_entered" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer/Address" to="." method="_on_text_entered"]
 [connection signal="text_changed" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer2/Port" to="." method="_on_text_changed"]
+[connection signal="text_entered" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer2/Port" to="." method="_on_text_entered"]
 [connection signal="text_changed" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer3/DatabaseName" to="." method="_on_text_changed"]
+[connection signal="text_entered" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer3/DatabaseName" to="." method="_on_text_entered"]
 [connection signal="text_changed" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer4/Username" to="." method="_on_text_changed"]
+[connection signal="text_entered" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer4/Username" to="." method="_on_text_entered"]
 [connection signal="text_changed" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer5/Password" to="." method="_on_text_changed"]
+[connection signal="text_entered" from="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer5/Password" to="." method="_on_text_entered"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/HBoxContainer2/Cancel" to="." method="_on_Cancel_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/HBoxContainer2/Initialize" to="." method="_on_Initialize_pressed"]

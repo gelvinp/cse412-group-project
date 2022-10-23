@@ -22,8 +22,13 @@ func _on_Cancel_pressed():
 
 
 func _on_text_changed(_new_text):
-	initalize.disabled = (address.text.length() == 0) || (port.text.length() == 0) || (database.text.length() == 0) || (username.text.length() == 0) || (password.text.length() == 0)
+	initalize.disabled = (address.text.length() == 0) || (port.text.length() == 0) || (database.text.length() == 0) || (username.text.length() == 0)
 
 
 func _on_Initialize_pressed():
 	emit_signal("initialize", address.text, port.text, database.text, username.text, password.text)
+
+
+func _on_text_entered(new_text):
+	if not initalize.disabled and modulate.a != 0:
+		initalize.emit_signal("pressed")

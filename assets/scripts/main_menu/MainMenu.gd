@@ -47,7 +47,8 @@ func show_form():
 
 
 func _exit_tree():
-	_db_init.cancel()
+	if is_instance_valid(_db_init):
+		_db_init.cancel()
 
 
 func _on_error(message: String):
