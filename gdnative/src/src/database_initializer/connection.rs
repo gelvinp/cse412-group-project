@@ -1,19 +1,23 @@
-use postgres::{Client, NoTls};
+use postgres::{Client, NoTls, Config};
+use r2d2_postgres::PostgresConnectionManager;
+use r2d2::{Pool};
 use gdnative::prelude::*;
+use std::str::FromStr;
 
 pub struct PGConnection
 {
     pub connection: Option<Client>,
+    pub pool: Option<Pool<PostgresConnectionManager<NoTls>>>,
     role: String,
 }
 
 impl PGConnection
 {
-    pub fn new() -> Self { Self { connection: None::<Client>, role: String::new() } }
+    pub fn new() -> Self { Self { connection: None, pool: None, role: String::new() } }
 
     pub fn connected(&self) -> bool
     {
-        self.connection.is_some()
+        self.pool.is_some()
     }
 
     pub fn connect(&mut self, ip: &str, port: &str, name: &str, user: &str, pass: &str) -> bool
@@ -21,6 +25,33 @@ impl PGConnection
         self.role = user.to_owned();
 
         let url = format!("postgresql://{}:{}@{}:{}/{}", user, pass, ip, port, name);
+
+        let manager = match Config::from_str(&url)
+        {
+            Ok(config) =>
+            {
+                PostgresConnectionManager::new(config, NoTls)
+            }
+
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return false;
+            }
+        };
+
+        self.pool = match r2d2::Pool::builder()
+            .max_size(15)
+            .build(manager)
+        {
+            Ok(pool) => Some(pool),
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return false;
+            }
+        };
+
         match Client::connect(&url, NoTls)
         {
             Ok(conn) =>

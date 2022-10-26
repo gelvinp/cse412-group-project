@@ -9,7 +9,7 @@
 config_version=4
 
 _global_script_classes=[ {
-"base": "Node",
+"base": "",
 "class": "DatabaseInitializer",
 "language": "NativeScript",
 "path": "res://gdnative/lib412/database_initializer.gdns"
