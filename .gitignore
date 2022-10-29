@@ -20,3 +20,5 @@ data_*/
 large_data/*
 !large_data/.gdignore
 .DS_Store
+build/
+*.code-workspace
