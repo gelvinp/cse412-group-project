@@ -12,11 +12,16 @@ use status::Status;
 use gdnative::export::user_data::MutexData;
 use std::io::{BufReader, Error, Read, Result, ErrorKind, BufWriter, Write};
 use std::fs::{File, self};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use connection::PGConnection;
+use crossbeam::scope;
+use crossbeam::channel::bounded;
+
+#[derive(Clone)]
+struct WeatherPointData(u32, usize, u8, i8, i8);
 
 
-const BATCH_SIZE: usize = 100_000;
+const BATCH_SIZE: usize = 10_000;
 
 
 #[derive(Clone, Copy)]
@@ -177,7 +182,7 @@ fn import_regions(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnecti
     let mut file = BufReader::new(File::open("large_data/regions/regions.bin")?);
 
     let mut header = [0u8; 1];
-    file.read(&mut header)?;
+    file.read_exact(&mut header)?;
 
     if header[0] != 0xAA
     {
@@ -185,7 +190,7 @@ fn import_regions(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnecti
     }
 
     let mut countBuffer = [0u8; 4];
-    file.read(&mut countBuffer)?;
+    file.read_exact(&mut countBuffer)?;
     
     let region_count = u32::from_le_bytes(countBuffer);
 
@@ -266,47 +271,51 @@ fn import_regions(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnecti
         }
     }
 
-    for batch in 0..batches
+    match scope(|batch_scope|
     {
-        let batch_start = batch * BATCH_SIZE;
-        let batch_end = std::cmp::min(batch_start + BATCH_SIZE, region_count as usize);
-
-        match connection.lock()
         {
-            Ok(mut res) =>
+            let conn = match connection.lock()
             {
-                if !res.insert_regions(&regions[batch_start..batch_end])
+                Ok(conn) => conn,
+                Err(e) =>
                 {
-                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                    return Err(Error::new(ErrorKind::Other, e.to_string()));
                 }
-            }
-    
-            Err(e) =>
+            };
+            
+            for batch in 0..batches
             {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
+                let mut batch_conn = conn.clone();
+                let batch_status = status.clone();
+
+                let batch_start = batch * BATCH_SIZE;
+                let batch_end = std::cmp::min(batch_start + BATCH_SIZE, region_count as usize);
+                let batch_content = &regions[batch_start..batch_end];
+
+                batch_scope.spawn(move |_|
+                {
+                    if !batch_conn.insert_regions(batch_content)
+                    {
+                        panic!();
+                    }
+
+                    match batch_status.lock()
+                    {
+                        Ok(mut res) => res.current_progress += 1,
+                        Err(_) => {}
+                    };
+
+                    true
+                });
             }
         }
 
-        match status.lock()
-        {
-            Ok(mut res) =>
-            {
-                if res.cancelled
-                {
-                    return Ok(region_count)
-                }
-                
-                res.current_progress = batch as u32 + 1;
-            }
-
-            Err(e) =>
-            {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
-            }
-        }
+        Ok(())
+    })
+    {
+        Ok(_) => Ok(region_count),
+        Err(_) => Err(Error::new(ErrorKind::Other, "Failed to insert regions"))
     }
-
-    Ok(region_count)
 }
 
 fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>) -> Result<Vec<Timepoint>>
@@ -316,7 +325,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConne
     let mut file = BufReader::new(File::open("large_data/timepoints/timepoints.bin")?);
 
     let mut header = [0u8; 1];
-    file.read(&mut header)?;
+    file.read_exact(&mut header)?;
 
     if header[0] != 0xBB
     {
@@ -324,9 +333,9 @@ fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConne
     }
 
     let mut countBuffer = [0u8; 4];
-    file.read(&mut countBuffer)?;
+    file.read_exact(&mut countBuffer)?;
     
-    let count = u32::from_le_bytes(countBuffer);
+    let count = u32::from_le_bytes(countBuffer) * 4;
 
     let mut timepoints = Vec::<Timepoint>::with_capacity(count as usize);
     let mut timepoint_strings = Vec::<String>::with_capacity(count as usize);
@@ -355,7 +364,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConne
     for index in 0..count
     {
         let mut timeBuffer = [0u8; 2];
-        file.read(&mut timeBuffer)?;
+        file.read_exact(&mut timeBuffer)?;
 
         let encoded = u16::from_le_bytes(timeBuffer);
 
@@ -418,7 +427,7 @@ fn import_timepoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConne
             {
                 if !res.insert_timepoints(&timepoint_strings[batch_start..batch_end])
                 {
-                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                    return Err(Error::new(ErrorKind::Other, "Failed to insert timepoints"));
                 }
             }
     
@@ -467,6 +476,7 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGCo
             res.current_progress = 0;
             res.total_work = timepoints.len() as u32;
             res.discrete_progress = true;
+            res.working_space = 0;
         }
 
         Err(e) =>
@@ -475,204 +485,229 @@ fn import_weatherpoints(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGCo
         }
     }
 
-    let (sender, receiver) = sync_channel(4);
-    let batchConnection = Arc::clone(connection);
-    let handle = thread::spawn(move|| {
-        batch_weatherpoints(receiver, batchConnection)
-    });
-
-    for (index, timepoint) in timepoints.into_iter().enumerate()
+    // TODO: Semicolon, get rid of it
+    match scope(|batch_scope|
     {
-        let mut points = Arc::new(Mutex::new(Vec::<String>::with_capacity(region_count as usize)));
+        let mut thread_count = 0u32;
+        
+        let (sender, receiver) = bounded::<Vec<WeatherPointData>>(20);
 
-        match timepoint
         {
-            Timepoint(year, month) =>
+            let conn = match connection.lock()
             {
-                let mut points = points.lock().unwrap();
-
-                let suffix = format!("{}-{:02}", year, month);
-
-                let mut file = BufReader::new(File::open(format!("large_data/weather_points/{}.bin", suffix))?);
-
-                let mut header = [0u8; 1];
-                file.read(&mut header)?;
-
-                if header[0] != 0xCC
+                Ok(conn) => conn,
+                Err(e) =>
                 {
-                    return Err(Error::new(ErrorKind::InvalidData, format!("Weatherpoint File {}: invalid header", suffix)));
+                    return Err(Error::new(ErrorKind::Other, e.to_string()));
                 }
+            };
 
-                let mut timepoint_id_buffer = [0u8; 4];
-                file.read(&mut timepoint_id_buffer)?;
-                
-                let timepoint_id = u32::from_le_bytes(timepoint_id_buffer);
+            thread_count = conn.max_connections();
 
-                if (timepoint_id as usize) != index
+            godot_print!("Now has {}", thread_count);
+
+            for _ in 0..thread_count
+            {
+                let mut batch_conn = conn.clone();
+                let batch_status = status.clone();
+                let batch_receiver = receiver.clone();
+
+                batch_scope.spawn(move |_|
                 {
-                    return Err(Error::new(ErrorKind::InvalidData, format!("Weatherpoint File {}: invalid ID", suffix)));
-                }
-
-                for regionID in 0..region_count
-                {
-                    match status.lock()
+                    loop
                     {
-                        Ok(mut res) =>
+                        let received = match batch_receiver.recv()
                         {
-                            if res.cancelled
+                            Ok(content) => content,
+                            Err(_) =>
                             {
-                                return Ok(())
+                                godot_print!("Panicking because of failed receive");
+                                panic!()
+                            }
+                        };
+
+                        godot_print!("Received len {}", received.len());
+
+                        if received.len() == 0
+                        {
+                            return;
+                        }
+
+                        let batches = received.len() / BATCH_SIZE;
+
+                        godot_print!("Batches {}", batches);
+
+                        for batch in 0..batches
+                        {
+                            godot_print!("Batch number {}", batch);
+
+                            let batch_start = batch * BATCH_SIZE;
+                            let batch_end = std::cmp::min(batch_start + BATCH_SIZE, received.len());
+                    
+                            if !batch_conn.insert_weatherpoints(&received[batch_start..batch_end].into_iter().map(|e| 
+                                format!("({}, {}, {}, {}, {})", e.0, e.1, e.2, e.3, e.4)).collect::<Vec<String>>())
+                            {
+                                godot_print!("Insert panic!");
+                                panic!()
                             }
                         }
-            
-                        Err(e) =>
+
+                        match batch_status.lock()
                         {
-                            return Err(Error::new(ErrorKind::Other, e.to_string()));
-                        }
+                            Ok(mut res) =>
+                            {
+                                if res.working_space == u32::MAX
+                                {
+                                    res.current_progress += 1;
+                                    godot_print!("{}", res.current_progress);
+                                }
+                                else
+                                {
+                                    res.working_space += 1;
+                                    godot_print!("{}", res.working_space);
+                                }
+                            }
+                            Err(_) => {}
+                        };
                     }
-
-                    let mut buffer = [0u8; 1];
-
-                    file.read(&mut header)?;
-                    let prec_mapped = u8::from_le_bytes(buffer);
-
-                    file.read(&mut header)?;
-                    let tmin = i8::from_le_bytes(buffer);
-
-                    file.read(&mut header)?;
-                    let tmax_mapped = i8::from_le_bytes(buffer);
-
-                    let prec = (-255f32 * f32::ln(-((prec_mapped as f32) - 255f32) / 255f32)) as u8;
-                    let tmax = (tmax_mapped + 20);
-
-                    if tmin > tmax
-                    {
-                        godot_print!("Problem: {}, {}", tmin, tmax);
-                    }
-
-                    points.push(format!("({}, {}, {}, {}, {})", regionID, index, prec, tmin, tmax));
-                }
-            }
-        }
-
-        sender.send(points);
-
-        match status.lock()
-        {
-            Ok(mut res) =>
-            {
-                if res.cancelled
-                {
-                    return Ok(())
-                }
-
-                res.current_progress = index as u32 + 1;
+                });
             }
 
-            Err(e) =>
-            {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
-            }
-        }
-    }
-
-    match status.lock()
-    {
-        Ok(mut res) =>
-        {
-            if res.cancelled
-            {
-                return Ok(())
-            }
-
-            res.set_stage(6);
-            res.discrete_progress = false;
+            godot_print!("Threads spawned");
         }
 
-        Err(e) =>
+        for (index, timepoint) in timepoints.into_iter().enumerate()
         {
-            return Err(Error::new(ErrorKind::Other, e.to_string()));
-        }
-    }
+            godot_print!("Timepoint ID {}", index);
 
-    match handle.join()
-    {
-        Ok(res) =>
-        {
-            match res
-            {
-                Ok(_) => {}
-                Err(err) =>
-                {
-                    return Err(Error::new(ErrorKind::Other, err.to_string()));
-                }
-            }
-        }
-
-        Err(_) =>
-        {
-            return Err(Error::new(ErrorKind::Other, "Weatherpoint batcher panicked!"));
-        }
-    }
-
-    Ok(())
-}
-
-
-fn batch_weatherpoints(receiver: Receiver<Arc<Mutex<Vec<String>>>>, connection: Arc<Mutex<PGConnection>>) -> Result<()>
-{
-    loop
-    {
-        let data = match receiver.recv()
-        {
-            Ok(res) => res,
-            Err(e) =>
-            {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
-            }
-        };
-        let data = match data.lock()
-        {
-            Ok(res) => res,
-            Err(e) =>
-            {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
-            }
-        };
-
-        if data.len() == 0
-        {
-            break;
-        }
-
-        let batches = ((data.len() / BATCH_SIZE) + 1) as usize;
-
-        for batch in 0..batches
-        {
-            let batch_start = batch * BATCH_SIZE;
-            let batch_end = std::cmp::min(batch_start + BATCH_SIZE, data.len());
+            let mut points = Vec::<WeatherPointData>::with_capacity(region_count as usize);
     
-            match connection.lock()
+            match timepoint
+            {
+                Timepoint(year, month) =>
+                {
+                    let suffix = format!("{}-{:02}", year, month);
+    
+                    let mut file = BufReader::new(File::open(format!("large_data/weather_points/{}.bin", suffix))?);
+
+                    let mut header = [0u8; 1];
+                    file.read_exact(&mut header)?;
+    
+                    if header[0] != 0xBB
+                    {
+                        godot_print!("Header error");
+                        return Err(Error::new(ErrorKind::InvalidData, format!("Weatherpoint File {}: invalid header", suffix)));
+                    }
+    
+                    let mut timepoint_id_buffer = [0u8; 4];
+                    file.read_exact(&mut timepoint_id_buffer)?;
+                    
+                    let timepoint_id = u32::from_le_bytes(timepoint_id_buffer);
+    
+                    if (timepoint_id as usize) != index
+                    {
+                        godot_print!("{} != {}", timepoint_id, index);
+                        return Err(Error::new(ErrorKind::InvalidData, format!("Weatherpoint File {}: invalid ID", suffix)));
+                    }
+    
+                    for regionID in 0..region_count
+                    {
+                        match status.lock()
+                        {
+                            Ok(mut res) =>
+                            {
+                                if res.cancelled
+                                {
+                                    return Ok(())
+                                }
+                            }
+                
+                            Err(e) =>
+                            {
+                                return Err(Error::new(ErrorKind::Other, e.to_string()));
+                            }
+                        }
+    
+                        let mut buffer = [0u8; 1];
+    
+                        file.read_exact(&mut buffer)?;
+                        let prec_mapped = u8::from_le_bytes(buffer);
+    
+                        file.read_exact(&mut buffer)?;
+                        let tmin = i8::from_le_bytes(buffer);
+    
+                        file.read_exact(&mut buffer)?;
+                        let tmax_mapped = i8::from_le_bytes(buffer);
+    
+                        let prec = (-255f32 * f32::ln(-((prec_mapped as f32) - 255f32) / 255f32)) as u8;
+                        let tmax = tmax_mapped + 20;
+    
+                        if tmin > tmax
+                        {
+                            godot_print!("Problem: {}, {}", tmin, tmax);
+                        }
+    
+                        points.push(WeatherPointData(regionID, index, prec, tmin, tmax));
+                    }
+                }
+            }
+
+            godot_print!("Sending points");
+
+            sender.send(points);
+    
+            match status.lock()
             {
                 Ok(mut res) =>
                 {
-                    if !res.insert_weatherpoints(&data[batch_start..batch_end])
+                    if res.cancelled
                     {
-                        return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                        return Ok(())
                     }
+    
+                    res.current_progress = index as u32 + 1;
                 }
-        
+    
                 Err(e) =>
                 {
                     return Err(Error::new(ErrorKind::Other, e.to_string()));
                 }
             }
+
+            godot_print!("I'm in a loop! {}", index);
+        }
+
+        godot_print!("Here I want to be!");
+
+        match status.lock()
+        {
+            Ok(mut res) =>
+            {
+                godot_print!("Here I am!");
+                res.set_stage(6);
+                res.current_progress = res.working_space;
+                res.working_space = u32::MAX;
+            }
+            Err(_) => {}
+        };
+
+        let mut empty = Vec::<WeatherPointData>::new();
+        for _ in 0..thread_count
+        {
+            sender.send(empty.clone());
+        }
+
+        Ok(())
+    })
+    {
+        Ok(_) => Ok(()),
+        Err(err) =>
+        {
+            godot_print!("Final panic! {:?}", err.type_id());
+            Err(Error::new(ErrorKind::Other, format!("{:?}", err)))
         }
     }
-
-    Ok(())
 }
-
 
 fn import_countries(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnection>>) -> Result<()>
 {
@@ -726,7 +761,7 @@ fn import_countries(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnec
         let mut file = BufReader::new(File::open(&country)?);
 
         let mut header = [0u8; 1];
-        file.read(&mut header)?;
+        file.read_exact(&mut header)?;
 
         if header[0] != 0xDD
         {
@@ -734,7 +769,7 @@ fn import_countries(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnec
         }
 
         let mut iso_a3 = [0u8; 3];
-        file.read(&mut iso_a3);
+        file.read_exact(&mut iso_a3);
         let mut iso_a3 = std::str::from_utf8(&iso_a3).unwrap_or_default().to_string();
         iso_a3.make_ascii_uppercase();
         iso_a3.push_str(".bin");
@@ -745,45 +780,57 @@ fn import_countries(status: &Arc<Mutex<Status>>, connection: &Arc<Mutex<PGConnec
         }
 
         let mut name_length = [0u8; 4];
-        file.read(&mut name_length)?;
+        file.read_exact(&mut name_length)?;
         
         let name_length = u32::from_le_bytes(name_length);
 
         let mut name = Vec::<u8>::new();
         name.resize(name_length as usize, 0u8);
-        file.read(&mut name);
+        file.read_exact(&mut name)?;
 
         let name = std::str::from_utf8(&name).unwrap_or_default();
 
         let mut center_buf = [0u8; 2];
 
-        file.read(&mut center_buf)?;
+        file.read_exact(&mut center_buf)?;
         let center_x = u16::from_le_bytes(center_buf);
         
-        file.read(&mut center_buf)?;
+        file.read_exact(&mut center_buf)?;
         let center_y = u16::from_le_bytes(center_buf);
 
         let mut count = [0u8; 4];
-        file.read(&mut count)?;
+        file.read_exact(&mut count)?;
         
         let count = u32::from_le_bytes(count);
 
         let mut region_buf = [0u8; 4];
         let mut regions = Vec::<u32>::with_capacity(count as usize);
 
+        let mut ahh = 0;
+
         for _ in 0..count
         {
-            file.read(&mut region_buf)?;
-            regions.push(u32::from_le_bytes(region_buf));
+            file.read_exact(&mut region_buf)?;
+            let region = u32::from_le_bytes(region_buf);
+            if region > 9_004_456
+            {
+                ahh += 1;
+            }
         }
+
+        if ahh > 0
+        {
+            godot_print!("Ahh {} is {} / {}", name, ahh, count);
+        }
+
 
         match connection.lock()
         {
             Ok(mut res) =>
             {
-                if !res.insert_country(&iso_a3, &name, center_x as u32, center_y as u32, &regions)
+                if !res.insert_country(&iso_a3[0..3], &name, (center_x as i16).into(), center_y as i16, &regions)
                 {
-                    return Err(Error::new(ErrorKind::Other, "Failed to insert regions"));
+                    return Err(Error::new(ErrorKind::Other, "Failed to insert countries"));
                 }
             }
     

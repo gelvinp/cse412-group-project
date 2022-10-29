@@ -9,6 +9,7 @@ onready var database := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContain
 onready var username := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer4/Username
 onready var password := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer5/Password
 onready var initalize := $MarginContainer/VBoxContainer/HBoxContainer2/Initialize
+onready var cancel := $MarginContainer/VBoxContainer/HBoxContainer2/Cancel
 
 
 func _ready():
@@ -32,3 +33,25 @@ func _on_Initialize_pressed():
 func _on_text_entered(new_text):
 	if not initalize.disabled and modulate.a != 0:
 		initalize.emit_signal("pressed")
+
+
+func disable():
+	initalize.disabled = true
+	initalize.text = "Connecting"
+	cancel.disabled = true
+	address.editable = false
+	port.editable = false
+	database.editable = false
+	username.editable = false
+	password.editable = false
+
+
+func enable():
+	initalize.disabled = false
+	initalize.text = "Initialize"
+	cancel.disabled = false
+	address.editable = true
+	port.editable = true
+	database.editable = true
+	username.editable = true
+	password.editable = true

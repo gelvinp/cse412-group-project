@@ -12,6 +12,7 @@ pub struct Status
     pub cancelled: bool,
     pub completed: bool,
     pub error: Option<String>,
+    pub working_space: u32,
 }
 
 impl Status
@@ -27,6 +28,7 @@ impl Status
             cancelled: false,
             completed: false,
             error: None,
+            working_space: 0,
         }
     }
 
