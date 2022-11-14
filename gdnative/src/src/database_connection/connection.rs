@@ -3,6 +3,7 @@ use r2d2_postgres::PostgresConnectionManager;
 use r2d2::{Pool};
 use gdnative::prelude::*;
 use std::str::FromStr;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct PGConnection
@@ -61,6 +62,41 @@ impl PGConnection
     pub fn max_connections(&self) -> u32
     {
         self.pool.as_ref().and_then(|p| Some(p.state().connections)).unwrap_or(0)
+    }
+
+    pub fn get_countries(&mut self) -> Option<HashMap<String, (i32, i32)>>
+    {
+        let pool = match &mut self.pool
+        {
+            Some(pool) => pool,
+            None => { return None; },
+        };
+
+        let mut client = match pool.get()
+        {
+            Ok(client) => client,
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return None;
+            }
+        };
+
+        let results = client.query("SELECT c_name, c_center_x, c_center_y FROM countries", &[]);
+        //godot_print!("{:?}", results);
+
+        let results = results.ok()?.into_iter().map(|row| -> (String, (i32, i32))
+        {
+            let name: String = row.get("c_name");
+            let center_x: i32 = row.get::<&str, i16>("c_center_x") as i32;
+            let center_y: i32 = row.get::<&str, i16>("c_center_y") as i32;
+            //godot_print!("{}, {}, {}", name, center_x, center_y);
+            (name, (center_x, center_y))
+        }).collect();
+        //godot_print!("{:?}", results);
+
+
+        Some(results)
     }
 
     pub fn init(&mut self) -> bool

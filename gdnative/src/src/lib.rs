@@ -1,12 +1,12 @@
-mod database_initializer;
+mod database_connection;
 
 use gdnative::prelude::*;
-use database_initializer::DatabaseInitializer;
+use database_connection::DatabaseConnection;
 
 
 fn init(handle: InitHandle)
 {
-	handle.add_class::<DatabaseInitializer>();
+	handle.add_class::<DatabaseConnection>();
 }
 
 

@@ -10,9 +10,9 @@ config_version=4
 
 _global_script_classes=[ {
 "base": "Node",
-"class": "DatabaseInitializer",
+"class": "DatabaseConnection",
 "language": "NativeScript",
-"path": "res://gdnative/lib412/database_initializer.gdns"
+"path": "res://gdnative/lib412/database_connection.gdns"
 }, {
 "base": "MarginContainer",
 "class": "ErrorDisplay",
@@ -30,7 +30,7 @@ _global_script_classes=[ {
 "path": "res://assets/scripts/main_menu/Progress.gd"
 } ]
 _global_script_class_icons={
-"DatabaseInitializer": "",
+"DatabaseConnection": "",
 "ErrorDisplay": "",
 "PostgreSQLClient": "",
 "ProgressDisplay": ""
@@ -43,6 +43,10 @@ run/main_scene="res://assets/scenes/main_menu/MainMenu.tscn"
 boot_splash/image="res://assets/textures/splash.png"
 boot_splash/bg_color=Color( 0, 0, 0, 1 )
 config/icon="res://icon.png"
+
+[autoload]
+
+DbConnection="*res://assets/scripts/db_connection.gd"
 
 [display]
 
