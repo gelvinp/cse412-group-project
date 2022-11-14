@@ -10,4 +10,5 @@ func _ready():
 
 
 func _process(delta):
-	rotate_y(-delta * _rotation_speed)
+	if DbConnection.countries.size() == 0:
+		rotate_y(-delta * _rotation_speed)
