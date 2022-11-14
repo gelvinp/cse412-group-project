@@ -27,10 +27,9 @@ render_target_update_mode = 3
 [node name="EarthCamera" type="Spatial" parent="ViewportContainer/Viewport"]
 
 [node name="Earth" parent="ViewportContainer/Viewport/EarthCamera" instance=ExtResource( 2 )]
-transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0, 0, 0 )
 
 [node name="Camera" type="Camera" parent="ViewportContainer/Viewport/EarthCamera"]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.97796 )
+transform = Transform( -4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 3, 0, 0 )
 environment = SubResource( 1 )
 projection = 2
 frustum_offset = Vector2( -0.286, 0 )
@@ -38,7 +37,7 @@ near = 0.79
 far = 24.7
 
 [node name="DirectionalLight" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6 )
+transform = Transform( -4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 0, 0, 6 )
 
 [node name="DBInitForm" parent="." instance=ExtResource( 3 )]
 anchor_top = 0.5
@@ -48,4 +47,9 @@ margin_top = -216.0
 margin_right = 417.0
 margin_bottom = 207.0
 
+[node name="OptionButton" type="OptionButton" parent="."]
+margin_right = 29.0
+margin_bottom = 20.0
+
 [connection signal="initialize" from="DBInitForm" to="." method="_on_DBInitForm_initialize"]
+[connection signal="item_selected" from="OptionButton" to="." method="_on_OptionButton_item_selected"]

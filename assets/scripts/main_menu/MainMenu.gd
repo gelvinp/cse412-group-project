@@ -6,6 +6,8 @@ var error: ErrorDisplay
 onready var form := $DBInitForm
 onready var camera := $ViewportContainer/Viewport/EarthCamera/Camera
 
+onready var countries := $OptionButton
+
 
 func _on_DBInitForm_initialize(address, port, database, username, password):	
 	form.disable()
@@ -23,6 +25,8 @@ func _connect(data):
 func _on_connect() -> void:
 	hide_form()
 	DbConnection.countries = DbConnection.connection.get_countries()
+	for country in DbConnection.countries.keys():
+			countries.add_item(country)
 
 
 func hide_form():
@@ -51,3 +55,12 @@ func _on_error_acknowledged():
 
 func _on_completed():
 	print("Completed")
+
+
+func _on_OptionButton_item_selected(index):
+	var coords = DbConnection.countries.values()[index]
+	print("Selected ", DbConnection.countries.keys()[index])
+	print("Coords are ", coords[0], ", ", coords[1])
+	
+	camera.transform.origin.y = -2
+	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
