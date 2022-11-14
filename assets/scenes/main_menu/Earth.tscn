@@ -1,9 +1,39 @@
-[gd_scene load_steps=4 format=2]
+[gd_scene load_steps=6 format=2]
 
 [ext_resource path="res://assets/textures/main_menu/earth_albedo.jpg" type="Texture" id=1]
 [ext_resource path="res://assets/scripts/main_menu/Earth.gd" type="Script" id=2]
 
+[sub_resource type="Shader" id=2]
+code = "shader_type spatial;
+
+uniform bool passthrough;
+
+uniform vec4 low:hint_color;
+uniform vec4 high:hint_color;
+
+void fragment()
+{
+	if (passthrough)
+	{
+		ALBEDO = texture(SCREEN_TEXTURE, SCREEN_UV).xyz;
+	}
+	else
+	{
+		float val = texture(SCREEN_TEXTURE, SCREEN_UV).x;
+
+		ALBEDO = mix(low, high, val).xyz;
+	}
+}"
+
+[sub_resource type="ShaderMaterial" id=3]
+render_priority = 1
+shader = SubResource( 2 )
+shader_param/passthrough = true
+shader_param/low = Color( 0.00784314, 0, 0.956863, 1 )
+shader_param/high = Color( 0.901961, 0.0196078, 0.0627451, 1 )
+
 [sub_resource type="SpatialMaterial" id=1]
+next_pass = SubResource( 3 )
 albedo_texture = ExtResource( 1 )
 roughness = 0.78
 
