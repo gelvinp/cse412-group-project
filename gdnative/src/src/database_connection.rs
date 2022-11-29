@@ -41,4 +41,10 @@ impl DatabaseConnection
     {
         self.connection.get_countries().unwrap_or_default()
     }
+
+    #[method]
+    fn get_data_for_timepoint(&mut self, timepoint_id: i32) -> Vec<(i32, i32, i32)>
+    {
+        self.connection.get_data_for_timepoint(timepoint_id).unwrap_or_default()
+    }
 }

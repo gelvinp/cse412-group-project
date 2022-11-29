@@ -99,6 +99,47 @@ impl PGConnection
         Some(results)
     }
 
+    pub fn get_data_for_timepoint(&mut self, timepoint_id: i32) -> Option<Vec<(i32, i32, i32)>>
+    {
+        let pool = match &mut self.pool
+        {
+            Some(pool) => pool,
+            None => { return None; },
+        };
+
+        let mut client = match pool.get()
+        {
+            Ok(client) => client,
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return None;
+            }
+        };
+
+        let results = client.query("SELECT wp_prec, wp_tmin, wp_tmax FROM weatherpoints WHERE wp_timepoint_id = $1", &[&timepoint_id]);
+        //godot_print!("{:?}", results);
+
+        let results = results.ok()?.into_iter().map(|row| -> (i32, i32, i32)
+        {
+            let prec: i32 = row.get("wp_prec");
+            let tmin: i32 = row.get::<&str, i16>("wp_tmin") as i32;
+            let tmax: i32 = row.get::<&str, i16>("wp_tmax") as i32;
+
+            let prec: f64 = prec as f64;
+            let prec = -255.0 * f64::ln(-(prec-255.0) / 255.0);
+            let prec: i32 = f64::round(prec) as i32;
+
+            let tmax = tmax + 20;
+            
+            (prec, tmin, tmax)
+        }).collect();
+        //godot_print!("{:?}", results);
+
+
+        Some(results)
+    }
+
     pub fn init(&mut self) -> bool
     {
         let pool = match &mut self.pool
