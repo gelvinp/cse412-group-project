@@ -63,10 +63,15 @@ func _on_OptionButton_item_selected(index):
 	print("Selected ", DbConnection.countries.keys()[index])
 	print("Coords are ", coords[0], ", ", coords[1])
 	
-#	camera.transform.origin.y = -2
-#	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
-	
 	var texture = DbConnection.connection.get_texture_for_timepoint_country(0, "wp_prec", coords[2])
 	(earth.material as SpatialMaterial).albedo_texture = texture
 	(earth.material.next_pass as ShaderMaterial).set_shader_param("color_strength", 1.0)
 	(earth.material as SpatialMaterial).flags_unshaded = true
+
+	var coord0 = (((coords[0] as float) / 8640.0) * 2 * PI + ((3.0/2.0) * PI)) * -1
+	var coord1 =  (((coords[1] as float) / 4320.0) * PI - PI/2) * -1
+	camera.transform.origin.x = 3 * cos(coord1) * cos(coord0)
+	camera.transform.origin.y = 3 * sin(coord1)
+	camera.transform.origin.z = 3 * cos(coord1) * sin(coord0) 
+	print(coord0, ", ", coord1)
+	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
