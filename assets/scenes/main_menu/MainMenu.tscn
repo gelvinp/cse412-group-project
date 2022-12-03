@@ -1,11 +1,14 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=8 format=2]
 
 [ext_resource path="res://assets/textures/main_menu/space.png" type="Texture" id=1]
 [ext_resource path="res://assets/scenes/main_menu/Earth.tscn" type="PackedScene" id=2]
 [ext_resource path="res://assets/scenes/main_menu/DBInitForm.tscn" type="PackedScene" id=3]
 [ext_resource path="res://assets/scripts/main_menu/MainMenu.gd" type="Script" id=4]
+[ext_resource path="res://assets/textures/UI/ninepatch.png" type="Texture" id=5]
 
 [sub_resource type="Environment" id=1]
+
+[sub_resource type="StyleBoxEmpty" id=3]
 
 [node name="MainMenu" type="Node"]
 script = ExtResource( 4 )
@@ -43,13 +46,71 @@ transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -5.65005, 0.161418, -2.54335 )
 anchor_top = 0.5
 anchor_bottom = 0.5
 margin_left = 87.0
-margin_top = -216.0
+margin_top = -179.0
 margin_right = 417.0
-margin_bottom = 207.0
+margin_bottom = 180.0
 
-[node name="OptionButton" type="OptionButton" parent="."]
+[node name="TimepointForm" type="PanelContainer" parent="."]
+visible = false
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_top = -64.0
+custom_styles/panel = SubResource( 3 )
+
+[node name="NinePatchRect" type="NinePatchRect" parent="TimepointForm"]
+margin_right = 1024.0
+margin_bottom = 64.0
+texture = ExtResource( 5 )
+patch_margin_left = 32
+patch_margin_top = 32
+patch_margin_right = 32
+patch_margin_bottom = 32
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="TimepointForm"]
+margin_right = 1024.0
+margin_bottom = 64.0
+custom_constants/margin_right = 16
+custom_constants/margin_top = 16
+custom_constants/margin_left = 16
+custom_constants/margin_bottom = 16
+
+[node name="HBoxContainer" type="HBoxContainer" parent="TimepointForm/MarginContainer"]
+margin_left = 16.0
+margin_top = 16.0
+margin_right = 1008.0
+margin_bottom = 48.0
+
+[node name="OptionButton" type="OptionButton" parent="TimepointForm/MarginContainer/HBoxContainer"]
 margin_right = 29.0
-margin_bottom = 20.0
+margin_bottom = 32.0
+
+[node name="Label" type="Label" parent="TimepointForm/MarginContainer/HBoxContainer"]
+margin_left = 33.0
+margin_top = 9.0
+margin_right = 133.0
+margin_bottom = 23.0
+rect_min_size = Vector2( 100, 0 )
+text = "Jan 1960s"
+align = 1
+
+[node name="HSlider" type="HSlider" parent="TimepointForm/MarginContainer/HBoxContainer"]
+margin_left = 137.0
+margin_right = 959.0
+margin_bottom = 32.0
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 23.0
+
+[node name="OptionButton2" type="OptionButton" parent="TimepointForm/MarginContainer/HBoxContainer"]
+margin_left = 963.0
+margin_right = 992.0
+margin_bottom = 32.0
 
 [connection signal="initialize" from="DBInitForm" to="." method="_on_DBInitForm_initialize"]
-[connection signal="item_selected" from="OptionButton" to="." method="_on_OptionButton_item_selected"]
+[connection signal="item_selected" from="TimepointForm/MarginContainer/HBoxContainer/OptionButton" to="." method="_on_OptionButton_item_selected"]
+[connection signal="drag_ended" from="TimepointForm/MarginContainer/HBoxContainer/HSlider" to="." method="_on_HSlider_drag_ended"]
+[connection signal="value_changed" from="TimepointForm/MarginContainer/HBoxContainer/HSlider" to="." method="_on_HSlider_value_changed"]
+[connection signal="item_selected" from="TimepointForm/MarginContainer/HBoxContainer/OptionButton2" to="." method="_on_OptionButton2_item_selected"]

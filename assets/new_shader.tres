@@ -8,6 +8,8 @@ uniform float color_strength;
 uniform vec4 low:hint_color;
 uniform vec4 high:hint_color;
 
+uniform sampler2D earth_albedo;
+
 void fragment()
 {
 	vec3 passthrough_albedo = texture(SCREEN_TEXTURE, SCREEN_UV).xyz;
@@ -15,7 +17,9 @@ void fragment()
 	float val = texture(SCREEN_TEXTURE, SCREEN_UV).x;
 
 	vec3 color_albedo = mix(low, high, val).xyz * ceil(val);
-	//ALBEDO = 
+	vec3 earth = texture(earth_albedo, UV).xyz * 0.2;
 	
-	ALBEDO = mix(passthrough_albedo, color_albedo, color_strength);
+	vec3 color_mixed = mix(earth, color_albedo, ceil(val));
+	
+	ALBEDO = mix(passthrough_albedo, color_mixed, color_strength);
 }"

@@ -212,7 +212,7 @@ impl PGConnection
             if field == "wp_prec"
             {
                 let prec: f64 = row.get::<&str, i16>("wp_prec") as f64;
-                let prec = -255.0 * f64::ln(-(prec-255.0) / 255.0);
+                let prec = (-255.0 * f64::ln(-(prec-255.0) / 255.0)).clamp(0.0, 512.0);
                 value = f64::round(prec) as i32;
             }
             else if field == "wp_tmin"

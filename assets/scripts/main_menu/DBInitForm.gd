@@ -9,17 +9,12 @@ onready var database := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContain
 onready var username := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer4/Username
 onready var password := $MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer5/Password
 onready var initalize := $MarginContainer/VBoxContainer/HBoxContainer2/Initialize
-onready var cancel := $MarginContainer/VBoxContainer/HBoxContainer2/Cancel
 
 
 func _ready():
 	modulate = Color(1, 1, 1, 0)
 	var tween = create_tween()
 	tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 1.0)
-
-
-func _on_Cancel_pressed():
-	get_tree().quit()
 
 
 func _on_text_changed(_new_text):
@@ -38,7 +33,6 @@ func _on_text_entered(new_text):
 func disable():
 	initalize.disabled = true
 	initalize.text = "Connecting"
-	cancel.disabled = true
 	address.editable = false
 	port.editable = false
 	database.editable = false
@@ -49,7 +43,6 @@ func disable():
 func enable():
 	initalize.disabled = false
 	initalize.text = "Initialize"
-	cancel.disabled = false
 	address.editable = true
 	port.editable = true
 	database.editable = true

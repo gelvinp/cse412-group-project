@@ -8,6 +8,7 @@ use std::hash::Hash;
 use std::sync::{Mutex, Arc};
 use std::collections::HashMap;
 use gdnative::api::{Image, ImageTexture};
+use std::thread::{self, JoinHandle};
 
 
 pub struct RegionCoord
@@ -42,7 +43,7 @@ impl DatabaseConnection
 impl DatabaseConnection
 {
     #[method]
-    fn db_connect(&mut self, ip: String, port: String, name: String, user: String, pass: String) -> bool
+    fn db_connect(&mut self, #[base] _base: TRef<Node, Shared>, ip: String, port: String, name: String, user: String, pass: String) -> bool
     {
         if self.connection.connect(&ip, &port, &name, &user, &pass)
         {
@@ -88,9 +89,17 @@ impl DatabaseConnection
         {
             for point in data
             {
+                let value = match field.as_str()
+                {
+                    "wp_prec" => point.1 as f32 / 512.0,
+                    "wp_tmin" => (point.1 + 50) as f32 / 82.0,
+                    "tp_tmax" => (point.1 + 23) as f32 / 91.0,
+                    _ => 0.0
+                };
+
                 if let Some(region) = self.region_coords.get(&point.0)
                 {
-                    img.set_pixel(region.x as i64, region.y as i64, Color::from_hsv(0.0, 0.0, point.1 as f32 / 256.0));
+                    img.set_pixel(region.x as i64, region.y as i64, Color::from_hsv(0.0, 0.0, value));
                 }
             }
         }
@@ -117,9 +126,17 @@ impl DatabaseConnection
         {
             for point in data
             {
+                let value = match field.as_str()
+                {
+                    "wp_prec" => point.1 as f32 / 512.0,
+                    "wp_tmin" => (point.1 + 50) as f32 / 82.0,
+                    "wp_tmax" => (point.1 + 23) as f32 / 91.0,
+                    _ => 0.0
+                };
+
                 if let Some(region) = self.region_coords.get(&point.0)
                 {
-                    img.set_pixel(region.x as i64, region.y as i64, Color::from_hsv(0.0, 0.0, point.1 as f32 / 256.0));
+                    img.set_pixel(region.x as i64, region.y as i64, Color::from_hsv(0.0, 0.0, value));
                 }
             }
         }

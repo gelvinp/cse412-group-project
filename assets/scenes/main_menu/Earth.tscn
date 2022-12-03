@@ -10,11 +10,12 @@ shader = ExtResource( 3 )
 shader_param/color_strength = 0.0
 shader_param/low = Color( 0.00784314, 0, 0.956863, 1 )
 shader_param/high = Color( 0.901961, 0.0196078, 0.0627451, 1 )
+shader_param/earth_albedo = ExtResource( 1 )
 
 [sub_resource type="SpatialMaterial" id=1]
 next_pass = SubResource( 3 )
+flags_unshaded = true
 albedo_texture = ExtResource( 1 )
-roughness = 0.78
 
 [node name="Earth" type="CSGSphere"]
 radial_segments = 24
