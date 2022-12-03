@@ -37,7 +37,16 @@ near = 0.79
 far = 24.7
 
 [node name="DirectionalLight" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
-transform = Transform( -4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 0, 0, 6 )
+transform = Transform( -4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 0.456652, 0.161418, 5.65005 )
+
+[node name="DirectionalLight2" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
+transform = Transform( 0.0499305, 0, -0.998753, 0, 1, 0, 0.998753, 0, 0.0499305, -0.147429, 0.224263, 6.11778 )
+
+[node name="DirectionalLight3" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
+transform = Transform( -0.99751, 0, -0.0705225, 0, 1, 0, 0.0705225, 0, -0.99751, -0.147429, 0.224263, 6.11778 )
+
+[node name="DirectionalLight4" type="DirectionalLight" parent="ViewportContainer/Viewport/EarthCamera"]
+transform = Transform( 0.999656, 0, -0.0262292, 0, 1, 0, 0.0262292, 0, 0.999656, -0.147429, 0.224263, 6.11778 )
 
 [node name="DBInitForm" parent="." instance=ExtResource( 3 )]
 anchor_top = 0.5

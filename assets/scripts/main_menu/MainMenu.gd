@@ -61,6 +61,26 @@ func _on_OptionButton_item_selected(index):
 	var coords = DbConnection.countries.values()[index]
 	print("Selected ", DbConnection.countries.keys()[index])
 	print("Coords are ", coords[0], ", ", coords[1])
-	
-	camera.transform.origin.y = -2
+#	var adjustY = coords[0] / 1500
+#	adjustY = adjustY * -1
+#	camera.transform.origin.y = adjustY
+#	var adjustX = coords[1] / 5000
+#	camera.transform.origin.x = adjustX
+#	var coord = int(coords[0])
+#
+#	var coord0 = int(coords[0])
+#	var coord1 = int(coords[1])
+#	while(coord0 % (2 * PI) != 0):
+#		coord0 = coord0 % (2 * PI)
+#	while(coord1 % (2 * PI) != 0):
+#		coord1 = coord1 % (2 * PI)
+
+	var coord0 = (((coords[0] as float) / 8640.0) * 2 * PI + ((3.0/2.0) * PI)) * -1
+	var coord1 =  (((coords[1] as float) / 4320.0) * PI - PI/2) * -1
+	#coord0 = deg2rad(coord0)
+	#coord1 = deg2rad(coord1)
+	camera.transform.origin.x = 3 * cos(coord1) * cos(coord0)
+	camera.transform.origin.y = 3 * sin(coord1)
+	camera.transform.origin.z = 3 * cos(coord1) * sin(coord0) 
+	print(coord0, ", ", coord1)
 	camera.look_at(Vector3(0, 0, 0), Vector3.UP)

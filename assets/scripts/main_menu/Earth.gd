@@ -4,6 +4,7 @@ export(float, 0.0, 0.5, 0.01) var rotation_speed
 var _rotation_speed = 0.0
 
 var data_texture = ImageTexture.new()
+var _spinning = true
 
 
 func _ready():
@@ -32,9 +33,9 @@ func _ready():
 func _process(delta):
 	if DbConnection.countries.size() == 0:
 		rotate_y(-delta * _rotation_speed)
-	else:
+	elif _spinning:
 		var tween = create_tween()
 		tween.set_ease(Tween.EASE_IN_OUT)
 		tween.set_trans(Tween.TRANS_SINE)
 		tween.tween_property(self, "rotation:y", 0.0, 0.6)
-		set_process(false)
+		_spinning = false
