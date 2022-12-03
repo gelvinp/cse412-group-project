@@ -4,6 +4,7 @@ use r2d2::{Pool};
 use gdnative::prelude::*;
 use std::str::FromStr;
 use std::collections::HashMap;
+use super::RegionCoord;
 
 #[derive(Clone)]
 pub struct PGConnection
@@ -64,7 +65,44 @@ impl PGConnection
         self.pool.as_ref().and_then(|p| Some(p.state().connections)).unwrap_or(0)
     }
 
-    pub fn get_countries(&mut self) -> Option<HashMap<String, (i32, i32)>>
+    pub fn get_regions(&mut self) -> Option<HashMap<i32, RegionCoord>>
+    {
+        let pool = match &mut self.pool
+        {
+            Some(pool) => pool,
+            None => { return None; },
+        };
+        godot_print!("Got pool");
+
+        let mut client = match pool.get()
+        {
+            Ok(client) => client,
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return None;
+            }
+        };
+        godot_print!("Got client");
+
+        let results = client.query("SELECT r_region_id, r_coord_x, r_coord_y FROM regions", &[]).unwrap_or_default();
+        godot_print!("Got {} results", results.len());
+
+        let results = results.into_iter().map(|row| -> (i32, RegionCoord)
+        {
+            let r_region_id: i32 = row.get::<&str, i32>("r_region_id");
+            let r_coord_x: i32 = row.get::<&str, i16>("r_coord_x") as i32;
+            let r_coord_y: i32 = row.get::<&str, i16>("r_coord_y") as i32;
+            //godot_print!("{}, {}, {}", name, center_x, center_y);
+            (r_region_id, RegionCoord { x: r_coord_x, y: r_coord_y })
+        }).collect();
+        //godot_print!("{:?}", results);
+
+
+        Some(results)
+    }
+
+    pub fn get_countries(&mut self) -> Option<HashMap<String, (i32, i32, String)>>
     {
         let pool = match &mut self.pool
         {
@@ -82,16 +120,17 @@ impl PGConnection
             }
         };
 
-        let results = client.query("SELECT c_name, c_center_x, c_center_y FROM countries", &[]);
+        let results = client.query("SELECT c_name, c_iso_a3, c_center_x, c_center_y FROM countries", &[]);
         //godot_print!("{:?}", results);
 
-        let results = results.ok()?.into_iter().map(|row| -> (String, (i32, i32))
+        let results = results.ok()?.into_iter().map(|row| -> (String, (i32, i32, String))
         {
             let name: String = row.get("c_name");
+            let iso_a3: String = row.get("c_iso_a3");
             let center_x: i32 = row.get::<&str, i16>("c_center_x") as i32;
             let center_y: i32 = row.get::<&str, i16>("c_center_y") as i32;
             //godot_print!("{}, {}, {}", name, center_x, center_y);
-            (name, (center_x, center_y))
+            (name, (center_x, center_y, iso_a3))
         }).collect();
         //godot_print!("{:?}", results);
 
@@ -133,6 +172,112 @@ impl PGConnection
             let tmax = tmax + 20;
             
             (prec, tmin, tmax)
+        }).collect();
+        //godot_print!("{:?}", results);
+
+
+        Some(results)
+    }
+
+    pub fn get_data_for_timepoint_field(&mut self, timepoint_id: i16, field: &str) -> Option<Vec<(i32, i32)>>
+    {
+        let pool = match &mut self.pool
+        {
+            Some(pool) => pool,
+            None => { return None; },
+        };
+        godot_print!("Got pool");
+
+        let mut client = match pool.get()
+        {
+            Ok(client) => client,
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return None;
+            }
+        };
+        godot_print!("Got client");
+
+        let query = format!("SELECT wp_region_id, {} FROM weatherpoints WHERE wp_timepoint_id = $1", field);
+
+        let results = client.query(&query, &[&timepoint_id]).unwrap();
+        godot_print!("Got {} results", results.len());
+
+        let results = results.into_iter().map(|row| -> (i32, i32)
+        {
+            let region_id: i32 = row.get("wp_region_id");
+            let mut value: i32 = 0;
+
+            if field == "wp_prec"
+            {
+                let prec: f64 = row.get::<&str, i16>("wp_prec") as f64;
+                let prec = -255.0 * f64::ln(-(prec-255.0) / 255.0);
+                value = f64::round(prec) as i32;
+            }
+            else if field == "wp_tmin"
+            {
+                value = row.get::<&str, i16>("wp_tmin") as i32;
+            }
+            else if field == "wp_tmax"
+            {
+                value = row.get::<&str, i16>("wp_tmax") as i32 + 20;
+            }
+
+            (region_id, value)
+        }).collect();
+        //godot_print!("{:?}", results);
+
+
+        Some(results)
+    }
+
+    pub fn get_data_for_timepoint_field_country(&mut self, timepoint_id: i16, field: &str, iso_a3: &str) -> Option<Vec<(i32, i32)>>
+    {
+        let pool = match &mut self.pool
+        {
+            Some(pool) => pool,
+            None => { return None; },
+        };
+        godot_print!("Got pool");
+
+        let mut client = match pool.get()
+        {
+            Ok(client) => client,
+            Err(err) =>
+            {
+                godot_print!("{}", err);
+                return None;
+            }
+        };
+        godot_print!("Got client");
+
+        let query = format!("SELECT wp_region_id, {} FROM weatherpoints INNER JOIN region_in_country ON wp_region_id = ric_region_id WHERE wp_timepoint_id = $1 AND ric_iso_a3 = $2", field);
+
+        let results = client.query(&query, &[&timepoint_id, &iso_a3]).unwrap();
+        godot_print!("Got {} results", results.len());
+
+        let results = results.into_iter().map(|row| -> (i32, i32)
+        {
+            let region_id: i32 = row.get("wp_region_id");
+            let mut value: i32 = 0;
+
+            if field == "wp_prec"
+            {
+                let prec: f64 = row.get::<&str, i16>("wp_prec") as f64;
+                let prec = -255.0 * f64::ln(-(prec-255.0) / 255.0);
+                value = f64::round(prec) as i32;
+            }
+            else if field == "wp_tmin"
+            {
+                value = row.get::<&str, i16>("wp_tmin") as i32;
+            }
+            else if field == "wp_tmax"
+            {
+                value = row.get::<&str, i16>("wp_tmax") as i32 + 20;
+            }
+
+            (region_id, value)
         }).collect();
         //godot_print!("{:?}", results);
 

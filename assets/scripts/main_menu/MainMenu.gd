@@ -7,6 +7,7 @@ onready var form := $DBInitForm
 onready var camera := $ViewportContainer/Viewport/EarthCamera/Camera
 
 onready var countries := $OptionButton
+onready var earth: CSGSphere = $ViewportContainer/Viewport/EarthCamera/Earth
 
 
 func _on_DBInitForm_initialize(address, port, database, username, password):	
@@ -62,5 +63,10 @@ func _on_OptionButton_item_selected(index):
 	print("Selected ", DbConnection.countries.keys()[index])
 	print("Coords are ", coords[0], ", ", coords[1])
 	
-	camera.transform.origin.y = -2
-	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+#	camera.transform.origin.y = -2
+#	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+	
+	var texture = DbConnection.connection.get_texture_for_timepoint_country(0, "wp_prec", coords[2])
+	(earth.material as SpatialMaterial).albedo_texture = texture
+	(earth.material.next_pass as ShaderMaterial).set_shader_param("color_strength", 1.0)
+	(earth.material as SpatialMaterial).flags_unshaded = true
